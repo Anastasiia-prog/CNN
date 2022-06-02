@@ -164,10 +164,11 @@ class Training_valid_testing_model:
         xb = xb.to(self.device)
         yb = self.model(xb)
         _, preds  = torch.max(yb, dim=1)
-        
-        print('Labels:', target)
-        show_sample(img, self.test_dataset.classes[preds[0].item()])
+
+        self.show_sample(img, target=self.test_dataset.classes[preds[0].item()])
         
     def testing_results(self):
         test_accuracy = self.testing()
+        
+        return test_accuracy
 
