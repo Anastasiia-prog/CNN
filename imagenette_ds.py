@@ -2,10 +2,15 @@ from torchvision import datasets
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms as T
 import torch
-    
 
-def load_imagenette(BATCH_SIZE: int=16, dir_name: str='./data/'):
+
+def load_imagenette(BATCH_SIZE: int=16, dir_name: str='./data/', download=False):
     
+    if download:
+        dataset_url = "https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz"
+        with tarfile.open(dataset_name + ".tgz", 'r:gz') as tar:
+            tar.extractall(path=dir_name)
+        
     dataset_name = "imagenette2-320"
 
     data_dir = dir_name + dataset_name
