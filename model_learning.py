@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
@@ -17,18 +16,11 @@ class Training_valid_testing_model:
         self.test_loader = test_loader
         self.test_dataset = test_dataset
         self.device = device
-    
-    def calculate_temp_accuracy(self, total, correct):
-        '''
-        Calculating an accuracy for the all batches (one epoch)
-        '''
-        return 100 * correct / total
-    
-    def calculate_avg_loss(self, running_loss, i):
-        '''
-        Calculating an average loss for the all batches (one epoch)
-        '''
-        return running_loss / (i + 1)
+        # save values of average loss for every epoch 
+        self.avg_loss_train = []
+        self.avg_loss_valid = []
+        self.accuracy_valid = []
+
     
     def training_one_epoch(self):
         train_losses = []
@@ -36,7 +28,7 @@ class Training_valid_testing_model:
         self.model.train(True)
         running_loss = 0.
 
-        for i, data in tqdm(enumerate(self.train_loader)):
+        for i, data in enumerate(self.train_loader):
             inps, labels = data
 
             inps = inps.to(self.device)
@@ -51,109 +43,98 @@ class Training_valid_testing_model:
 
             running_loss += loss.item()
             
-        avg_loss = self.calculate_avg_loss(running_loss, i)
+        avg_loss = running_loss / (i + 1)
+        self.avg_loss_train.append(avg_loss)
         
-        return running_loss, avg_loss
-            
-    def validation_one_epoch(self):
-        running_vloss = 0.
+        return avg_loss
+    
+    def validation_testing_one_epoch(self, action: str='validation'):
+        '''
+        param action: validation or testing
+        '''
+        
+        running_loss = 0.
         self.model.train(False)
         with torch.no_grad():
             total = 0.
             correct = 0.
             running_vloss = 0.
 
-            for i, vdata in tqdm(enumerate(self.val_loader)):
-                vinps, vlabels = vdata
+            for i, vdata in enumerate(self.val_loader):
+                inps, labels = vdata
 
-                vinps = vinps.to(self.device)
-                vlabels = vlabels.to(self.device)
+                inps = inps.to(self.device)
+                labels = labels.to(self.device)
 
-                voutputs = self.model(vinps)
+                outputs = self.model(inps)
 
-                _, predicted = torch.max(voutputs.data, 1)
+                _, predicted = torch.max(outputs.data, 1)
             
-                total += vlabels.size(0)
-                correct += (predicted == vlabels).sum().item()
-
-                vloss = self.loss_function(voutputs, vlabels)
-                running_vloss += vloss.item()
-                
-        # calculate average loss per epoch
-        avg_vloss = self.calculate_avg_loss(running_vloss, i)
-        # calculate accuracy for one epoch
-        temp_accuracy = self.calculate_temp_accuracy(total, correct)
-    
-        return running_vloss, avg_vloss, temp_accuracy
-    
-    def testing(self):
-        # Testing
-        self.model.train(False)
-        num_correct = 0.
-        num_samples = 0.
-
-        for batch_idx, (data, labels) in enumerate(self.test_loader):
-            data = data.to(self.device)
-            labels = labels.to(self.device)
-            scores = self.model(data)
-    
-            _, predicted = torch.max(scores.data, 1)
-            num_samples += labels.size(0)
-            num_correct += (predicted == labels).sum().item()
-
-            f1_score = torch.div(num_correct, len(labels))
-            test_accuracy = num_correct / num_samples * 100
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+                if action == 'validation':
+                    loss = self.loss_function(outputs, labels)
+                    running_loss += loss.item()
             
-        return test_accuracy
+        # calculate f1 score for one epoch  
+        f1_score = torch.div(correct, len(labels))   
+        # calculating an accuracy for the all batches (one epoch)
+        temp_accuracy = 100 * correct / total
+        
+        if action == 'validation':       
+            # calculate average loss per epoch
+            avg_loss = running_loss / (i + 1)
+            self.avg_loss_valid.append(avg_loss)
+            self.accuracy_valid.append(temp_accuracy)
+            
+            return temp_accuracy, avg_loss
     
-    def plot_losses(self, train_losses, valid_losses):
+        return temp_accuracy, f1_score
+    
+    def plot_losses(self, train_losses: list, valid_losses: list,
+                    fig_size_width: int, fig_size_height: int):
+        
+        plt.figure(figsize=(fig_size_width, fig_size_height))
         plt.plot(train_losses, label='Train')
         plt.plot(valid_losses, label='Validation')
         plt.legend()
-        plt.title('Графики лоссов на train и validation')
-        plt.xlabel('Номер эпохи')
-        plt.ylabel('Значение лосса')
-        plt.grid(True);
+        plt.title('Train and validation cross-entropy losses')
+        plt.xlabel('Epoch number')
+        plt.ylabel('Loss')
+        plt.grid(True)
+        plt.show()
     
-    def plot_accuracy(self, validation_accuracy):
+    def plot_accuracy(self, validation_accuracy: list,
+                      fig_size_width: int, fig_size_height: int):
+        
+        plt.figure(figsize=(fig_size_width, fig_size_height))
         plt.plot(validation_accuracy, label='Validation')
         plt.legend()
         plt.title('Validation accuracy')
-        plt.xlabel('Номер эпохи')
-        plt.ylabel('Значение accuracy')
-        plt.grid(True);
+        plt.xlabel('Epoch number')
+        plt.ylabel('Accuracy')
+        plt.grid(True)
+        plt.show()
         
-    def learning_run(self):
-        train_losses = []
-        valid_losses = []
-        validation_accuracy = []
+    def launch_epochs_calculations(self):
 
-        for epoch in range(self.num_epochs):
+        for epoch in tqdm(range(self.num_epochs)):
             print('Epoch number is', epoch + 1)
             # TRAINING
-            running_loss, avg_loss = self.training_one_epoch()
-
-            # save values of average loss for every epoch 
-            train_losses.append(avg_loss)
+            avg_loss = self.training_one_epoch()
 
             # VALIDATION
-            running_vloss, avg_vloss, temp_accuracy = self.validation_one_epoch()
-
-            # save values of average loss for every epoch 
-            valid_losses.append(avg_vloss)
-            # save accuracy for every epoch
-            validation_accuracy.append(temp_accuracy)
+            temp_accuracy, avg_vloss = self.validation_testing_one_epoch(action='validation')
 
             print(f'CrossEntropyLoss train {avg_loss}')
             print(f'CrossEntropyLoss validation {avg_vloss}')
             print(f'Validation accuracy: {temp_accuracy}')
-            
-        self.plot_losses(train_losses, valid_losses)
-        plt.show()
-        self.plot_accuracy(validation_accuracy)
-        plt.show()
-    
         
+        # TESTING
+        temp_accuracy_test, f1_score_test = self.validation_testing_one_epoch(action='testing')
+        print('Test accuracy:', temp_accuracy_test)
+        print('Test F1-score:', f1_score_test)
+    
     def show_sample(self, img, target):
         plt.imshow(img.permute(1, 2, 0))
         print('Labels:', target)
@@ -166,9 +147,4 @@ class Training_valid_testing_model:
         _, preds  = torch.max(yb, dim=1)
 
         self.show_sample(img, target=self.test_dataset.classes[preds[0].item()])
-        
-    def testing_results(self):
-        test_accuracy = self.testing()
-        
-        return test_accuracy
 
