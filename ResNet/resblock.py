@@ -1,33 +1,26 @@
 from SEBlock import SE_Block
 import torch.nn.functional as F
 from torch import nn
+import torch
 
 class BottleneckBlock(nn.Module):
     expansion = 4
-    def __init__(self, in_channels: int, out_channels: int, add_se_block: bool=True, stride: int=1, groups: int=1, 
+    def __init__(self, in_channels: int, out_channels: int, groups: int, add_se_block: bool=True, stride: int=1,
                  downsample: torch.nn.modules.container.Sequential=nn.Sequential(),
                  base_width=64, bwidth: int=4):
         '''
-        if groups is more than 1, we need to change the mid_channels and out_channels and then ResNet will be ResNext
-        
-        :param: bwidth: the whole number of th channels across all groups
+        if groups is more than 1,  then ResNet will be ResNext
         '''
         super().__init__() 
         mid_channels = int(out_channels * (base_width / 64))
-        
-        if groups > 1:
-            self.expansion = 2
-            mid_channels = groups * bwidth
-            out_channels = groups * bwidth
-            
         self.add_se_block = add_se_block
         
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=mid_channels, kernel_size=1,
-                               bias=False, stride=stride)
+                               bias=False)
         self.bn1 = nn.BatchNorm2d(num_features=mid_channels)
         
         self.conv2 = nn.Conv2d(in_channels=mid_channels, out_channels=mid_channels, kernel_size=3, padding=1,
-                               bias=False, groups=groups)
+                               bias=False, groups=groups, stride=stride)
         self.bn2 = nn.BatchNorm2d(num_features=mid_channels)
         
         self.conv3 = nn.Conv2d(in_channels=mid_channels, out_channels=out_channels * self.expansion, kernel_size=1,
@@ -66,7 +59,7 @@ class ConvBlock(nn.Module):
     expansion = 1
     def __init__(self, in_channels: int, out_channels: int, add_se_block: bool=True, stride: int=1, 
                  downsample: torch.nn.modules.container.Sequential=nn.Sequential(),
-                 base_width=64):
+                 base_width=64, groups=1):
         super().__init__()
         self.add_se_block = add_se_block
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding=1,
@@ -102,12 +95,13 @@ class ConvBlock(nn.Module):
         return out
 
 class ResBlock(nn.Module):
-    def __init__(self, block: object, layers: list, num_classes: int, start_channels: int, width_per_group=64):
+    def __init__(self, block: object, layers: list, num_classes: int, start_channels: int, groups :int, width_per_group: int=64):
         '''
         start_channels - how many channels in source images (for example for RGB images = 3)
         '''
         super().__init__()
         
+        self.groups = groups
         self.in_channels = 64
         self.base_width = width_per_group
         
@@ -136,11 +130,11 @@ class ResBlock(nn.Module):
             )
 
         layers = []
-        layers.append(block(in_channels=self.in_channels, out_channels=channels, stride=stride, downsample=downsample))
+        layers.append(block(in_channels=self.in_channels, out_channels=channels, stride=stride, downsample=downsample, groups=self.groups))
         self.in_channels = channels * block.expansion
         for _ in range(1, blocks):
             layers.append(block(in_channels=self.in_channels, out_channels=channels,
-                                base_width=self.base_width))
+                                base_width=self.base_width, groups=self.groups))
 
         return nn.Sequential(*layers)
     
@@ -161,7 +155,7 @@ class ResBlock(nn.Module):
         
         return x
 
-def ResNetNN(resnet_number: int, start_channels: int=3,  num_classes :int=10):
+def ResNetNN(resnet_number: int, start_channels: int=3,  num_classes :int=10, groups: int=1):
     resnets = {18: [2, 2, 2, 2], 34: [3, 4, 6, 3], 50: [3, 4, 6, 3],
                101: [3, 4, 23, 3], 152: [3, 8, 36, 3]}
     
@@ -172,4 +166,4 @@ def ResNetNN(resnet_number: int, start_channels: int=3,  num_classes :int=10):
     else:
         block = BottleneckBlock
     
-    return ResBlock(block=block, layers=layers, num_classes=num_classes, start_channels=start_channels)
+    return ResBlock(block=block, layers=layers, num_classes=num_classes, start_channels=start_channels, groups=groups)
