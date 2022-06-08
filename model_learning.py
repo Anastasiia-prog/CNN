@@ -20,7 +20,22 @@ class Training_valid_testing_model:
         self.avg_loss_train = []
         self.avg_loss_valid = []
         self.accuracy_valid = []
-
+        
+    
+    def get_train_avg_loss(self) -> list:
+        # return saved average train loss
+        # for every epoch
+        return self.avg_loss_train
+    
+    def get_valid_avg_loss(self) -> list:
+        # return saved average validation 
+        # loss for every epoch
+        return self.avg_loss_valid
+    
+    def get_valid_accuracy(self) -> list:
+        # return saved average validation
+        # accuracy for every epoch
+        return self.accuracy_valid
     
     def training_one_epoch(self):
         train_losses = []

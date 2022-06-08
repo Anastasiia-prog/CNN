@@ -3,13 +3,13 @@ from torch import nn
 
 
 class SE_Block(nn.Module):
-    def __init__(self, in_channels: int, r: int=16):
+    def __init__(self, in_channels: int, reduction_ratio: int=16):
         super().__init__()
         self.squeeze = nn.AdaptiveAvgPool2d(1)
         self.excitation = nn.Sequential(
-            nn.Linear(in_channels, in_channels // r),
+            nn.Linear(in_channels, in_channels // reduction_ratio),
             nn.ReLU(inplace=True),
-            nn.Linear(in_channels // r, in_channels),
+            nn.Linear(in_channels // reduction_ratio, in_channels),
             nn.Sigmoid()
         )
         

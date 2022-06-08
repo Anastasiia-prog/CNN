@@ -1,4 +1,4 @@
-### ResNet34
+### ResNet
 
-[![Typing SVG](https://readme-typing-svg.herokuapp.com?color=231AF7&lines=Here+is+ResNet34+implementation+in+resnet34.ipynb)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.herokuapp.com?color=231AF7&lines=My+CV+code)](https://git.io/typing-svg)
 
