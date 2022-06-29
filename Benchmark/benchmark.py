@@ -86,16 +86,15 @@ def tracker(module, inputs, repeats=300, warmup=40, device=None, track_backward=
 
         for i in range(repeats + warmup):
 
-            if i < warmup:
-                with torch.cuda.amp.autocast(enabled=amp):
-                    outputs = module(inputs)
-                outputs.backward(outputs)
-                del outputs
-                torch.cuda.empty_cache()
-                i += 1
-                continue
-            
             with torch.cuda.amp.autocast(enabled=amp):
+                if i < warmup:
+                    outputs = module(inputs)
+                    outputs.backward(outputs)
+                    del outputs
+                    torch.cuda.empty_cache()
+                    i += 1
+                    continue
+                    
                 # calculate forward operation time  
                 with Time_tracker() as t:
                     outputs = module(inputs)
@@ -103,6 +102,7 @@ def tracker(module, inputs, repeats=300, warmup=40, device=None, track_backward=
                 forward_time = t.timer()        
                 forward_timings.append(forward_time) 
 
+                
             if track_backward:
                 # calculate backward operation time 
                 with Time_tracker() as t:
