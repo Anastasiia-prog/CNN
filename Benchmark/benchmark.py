@@ -4,15 +4,20 @@ import pandas as pd
 import torch
 from ptflops import get_model_complexity_info
 
+# different sizes for memory representation
+MEMORY_UNIT_CONSTANTS = {'GB': 1e-9, 'MB': 1e-6, 'KB': 1e-3, 'B': 1.}
 
-memory_unit_constants = {'GB': 1e-9, 'MB': 1e-6, 'KB': 1e-3, 'B': 1.}
 
-
-class Time_tracker:
+class TimeTracker:
+    '''
+    Track time for operation on gpu.
+    '''
+    
     def __enter__(self):
         self.start = torch.cuda.Event(enable_timing=True)
         self.end = torch.cuda.Event(enable_timing=True)
         self.start.record()
+        
         return self
 
     def __exit__(self, type, value, traceback):
@@ -23,34 +28,40 @@ class Time_tracker:
         return self.start.elapsed_time(self.end)
     
     
-class Memory_tracker:
+class MemoryTracker:
+    '''
+    Track used memory for operation on gpu.
+    '''
+    
     def __init__(self, device=None):
         self.device = device
         
     def __enter__(self):
-        self.start_memory = get_memory(device=self.device)
+        torch.cuda.reset_peak_memory_stats()
+        self.start_memory = torch.cuda.max_memory_allocated(self.device)
+        
         return self
 
     def __exit__(self, type, value, traceback):
-        self.end_memory = get_memory(reset_memory=False, device=self.device) 
+        self.end_memory = torch.cuda.max_memory_allocated(self.device) 
         
     def memory_allocated(self):
         return self.end_memory - self.start_memory 
     
-
-
-def get_memory(reset_memory=True, device=None):
-    """Take current max allocated memory, either with or without resetting"""
-    if reset_memory:
-        torch.cuda.reset_peak_memory_stats()
-            
-    max_memory = torch.cuda.max_memory_allocated(device)
-        
-    return max_memory
-    
     
 def make_initialization_inputs(inputs, device=None):
-    """ Take either tensor, shape tuple or list of them, and always return tensor or list of them. """
+    '''
+    Take either tensor, shape tuple or list of them, 
+    and always return tensor or list of them.
+    
+    Parameters
+    ----------
+    inputs : (tensor, tuple, list)
+             Data which enter to the module.
+    device : str
+             Device can be 'cpu' or 'gpu'.
+    '''
+
     if isinstance(inputs, torch.Tensor):
         pass
     elif isinstance(inputs, tuple):
@@ -61,13 +72,47 @@ def make_initialization_inputs(inputs, device=None):
 
     
     
-def tracker(module, inputs, repeats=300, warmup=40, device=None, track_backward=True, # .py file ???
+def cuda_time_memory_tracker(module, inputs, repeats=300, warmup=40, device=None, track_backward=True, # .py file ???
             channels_last=False, amp=False, memory_unit='MB') -> dict:
-    """Track module #macs, #parameters, time and memory consumption on forward and backward pass for a given inputs tensor or inputs shape"""
+    '''
+    Track module #macs, #parameters, time and memory consumption on forward and backward 
+    pass for a given inputs tensor or inputs shape.
     
-    memory_unit_constant = memory_unit_constants[memory_unit]
+    Parameters
+    ----------
+    module : torch.nn.modules
+             
+    inputs : (tensor, tuple, list)
+             Data which enter to the module.
+             
+    repeats : int
+              The number shows how many times we want to repeat
+              module for tracking memory and time.
+              
+    warmup : int
+             
+    device : str
+             Device can be 'cpu' or 'gpu'.
+             
+    track_backward : bool
+                     If True we want to track time and memory for backward operation.
+                     
+    channels_last : bool
     
-    with Time_tracker() as total_time:
+    amp : bool
+    
+    memory_unit : str
+                  See MEMORY_UNIT_CONSTANTS which units you can choose for memory
+    
+    Returns
+    -------
+    dict
+        Keys of dict are forward/backward time/memory and values are their results.
+    '''
+    
+    memory_unit_constant = MEMORY_UNIT_CONSTANTS[memory_unit]
+    
+    with TimeTracker() as total_time:
     
         result = {}
 
@@ -97,7 +142,7 @@ def tracker(module, inputs, repeats=300, warmup=40, device=None, track_backward=
                 
             with torch.cuda.amp.autocast(enabled=amp):
                 # calculate forward operation time  
-                with Time_tracker() as t:
+                with TimeTracker() as t:
                     outputs = module(inputs)
 
                 forward_time = t.timer()        
@@ -106,7 +151,7 @@ def tracker(module, inputs, repeats=300, warmup=40, device=None, track_backward=
                 
             if track_backward:
                 # calculate backward operation time 
-                with Time_tracker() as t:
+                with TimeTracker() as t:
                     outputs.backward(outputs)
                 backward_time = t.timer()
                 backward_timings.append(backward_time)
@@ -116,7 +161,7 @@ def tracker(module, inputs, repeats=300, warmup=40, device=None, track_backward=
 
         
         # calculate forward memory
-        with Memory_tracker(device=device) as memory:
+        with MemoryTracker(device=device) as memory:
             module(inputs)
         forward_memory = memory.memory_allocated()
         result['forward memory'] = forward_memory * memory_unit_constant
@@ -128,7 +173,7 @@ def tracker(module, inputs, repeats=300, warmup=40, device=None, track_backward=
             
             # calculate backward memory
             outputs = module(inputs)
-            with Memory_tracker(device=device) as memory:
+            with MemoryTracker(device=device) as memory:
                 outputs.backward(outputs)
             backward_memory = memory.memory_allocated()
             result['backward memory'] = backward_memory * memory_unit_constant
