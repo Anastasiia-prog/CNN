@@ -3,8 +3,9 @@ import pandas as pd
 
 import torch
 from ptflops import get_model_complexity_info
+from batchflow.models.torch.utils import make_initialization_inputs
 
-# different sizes for memory representation
+# different units for memory representation
 MEMORY_UNIT_CONSTANTS = {'GB': 1e-9, 'MB': 1e-6, 'KB': 1e-3, 'B': 1.}
 
 
@@ -24,7 +25,8 @@ class TimeTracker:
         self.end.record()
         torch.cuda.synchronize()
         
-    def timer(self):
+    @property
+    def value(self):
         return self.start.elapsed_time(self.end)
     
     
@@ -45,35 +47,13 @@ class MemoryTracker:
     def __exit__(self, type, value, traceback):
         self.end_memory = torch.cuda.max_memory_allocated(self.device) 
         
-    def memory_allocated(self):
+    @property
+    def value(self):
         return self.end_memory - self.start_memory 
     
     
-def make_initialization_inputs(inputs, device=None):
-    '''
-    Take either tensor, shape tuple or list of them, 
-    and always return tensor or list of them.
-    
-    Parameters
-    ----------
-    inputs : (tensor, tuple, list)
-             Data which enter to the module.
-    device : str
-             Device can be 'cpu' or 'gpu'.
-    '''
-
-    if isinstance(inputs, torch.Tensor):
-        pass
-    elif isinstance(inputs, tuple):
-        inputs = torch.rand(*inputs, device=device)
-    elif isinstance(inputs, list):
-        inputs = [make_initialization_inputs(item, device=device) for item in inputs]
-    return inputs
-
-    
-    
-def cuda_time_memory_tracker(module, inputs, repeats=300, warmup=40, device=None, track_backward=True, # .py file ???
-            channels_last=False, amp=False, memory_unit='MB') -> dict:
+def get_module_info(module, inputs, repeats=300, warmup=40, device=None, track_backward=True,
+                    channels_last=False, amp=False, memory_unit='MB') -> dict:
     '''
     Track module #macs, #parameters, time and memory consumption on forward and backward 
     pass for a given inputs tensor or inputs shape.
@@ -90,6 +70,7 @@ def cuda_time_memory_tracker(module, inputs, repeats=300, warmup=40, device=None
               module for tracking memory and time.
               
     warmup : int
+             Do a few iterations for stabilize std.
              
     device : str
              Device can be 'cpu' or 'gpu'.
@@ -98,8 +79,11 @@ def cuda_time_memory_tracker(module, inputs, repeats=300, warmup=40, device=None
                      If True we want to track time and memory for backward operation.
                      
     channels_last : bool
+                    You can change strides by choosing memory format = channels_last for your module
+                    and check how module perfomance changes.
     
     amp : bool
+          Set True or False for the parameter enabled in torch.cuda.amp.autocast(enabled=amp)
     
     memory_unit : str
                   See MEMORY_UNIT_CONSTANTS which units you can choose for memory
@@ -128,7 +112,6 @@ def cuda_time_memory_tracker(module, inputs, repeats=300, warmup=40, device=None
         forward_timings = []
         backward_timings = []
 
-
         for i in range(repeats + warmup):
 
             if i < warmup:
@@ -142,31 +125,28 @@ def cuda_time_memory_tracker(module, inputs, repeats=300, warmup=40, device=None
                 
             with torch.cuda.amp.autocast(enabled=amp):
                 # calculate forward operation time  
-                with TimeTracker() as t:
+                with TimeTracker() as ft:
                     outputs = module(inputs)
 
-                forward_time = t.timer()        
+                forward_time = ft.value        
                 forward_timings.append(forward_time) 
 
-                
             if track_backward:
                 # calculate backward operation time 
-                with TimeTracker() as t:
+                with TimeTracker() as bt:
                     outputs.backward(outputs)
-                backward_time = t.timer()
+                backward_time = bt.value
                 backward_timings.append(backward_time)
 
         result['forward time mean(ms)'] = np.mean(forward_timings) 
         result['forward time std(ms)'] = np.std(forward_timings)
 
-        
         # calculate forward memory
         with MemoryTracker(device=device) as memory:
             module(inputs)
-        forward_memory = memory.memory_allocated()
+        forward_memory = memory.value
         result['forward memory'] = forward_memory * memory_unit_constant
 
-        
         if track_backward:
             result['backward time mean(ms)'] = np.mean(backward_timings)
             result['backward time std(ms)'] = np.std(backward_timings)
@@ -175,14 +155,14 @@ def cuda_time_memory_tracker(module, inputs, repeats=300, warmup=40, device=None
             outputs = module(inputs)
             with MemoryTracker(device=device) as memory:
                 outputs.backward(outputs)
-            backward_memory = memory.memory_allocated()
+            backward_memory = memory.value
             result['backward memory'] = backward_memory * memory_unit_constant
 
-            
-        macs, params = get_model_complexity_info(module, tuple(inputs.shape[1:]), as_strings=False, print_per_layer_stat=False)
+        macs, params = get_model_complexity_info(module, tuple(inputs.shape[1:]), 
+                                                 as_strings=False, print_per_layer_stat=False)
         result['macs'] = macs
         result['parameters'] = float(params)
 
-    result['time total(ms)'] = total_time.timer()
+    result['time total(ms)'] = total_time.value
     
     return result
