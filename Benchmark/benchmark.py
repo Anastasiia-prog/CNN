@@ -6,19 +6,14 @@ from ptflops import get_model_complexity_info
 from batchflow.models.torch.utils import make_initialization_inputs
 
 # different units for memory representation
-MEMORY_UNIT_CONSTANTS = {'GB': 1e-9, 'MB': 1e-6, 'KB': 1e-3, 'B': 1.}
-
+MEMORY_UNIT_CONSTANTS = {'GB': 1/(1024*1024*1024), 'MB': 1/(1024*1024), 'KB': 1/1024, 'B': 1.}
 
 class TimeTracker:
-    '''
-    Track time for operation on gpu.
-    '''
-    
+    """Track time for operation on gpu."""
     def __enter__(self):
         self.start = torch.cuda.Event(enable_timing=True)
         self.end = torch.cuda.Event(enable_timing=True)
         self.start.record()
-        
         return self
 
     def __exit__(self, type, value, traceback):
@@ -29,19 +24,14 @@ class TimeTracker:
     def value(self):
         return self.start.elapsed_time(self.end)
     
-    
 class MemoryTracker:
-    '''
-    Track used memory for operation on gpu.
-    '''
-    
+    """Track used memory for operation on gpu."""
     def __init__(self, device=None):
         self.device = device
         
     def __enter__(self):
         torch.cuda.reset_peak_memory_stats()
         self.start_memory = torch.cuda.max_memory_allocated(self.device)
-        
         return self
 
     def __exit__(self, type, value, traceback):
@@ -51,40 +41,31 @@ class MemoryTracker:
     def value(self):
         return self.end_memory - self.start_memory 
     
-    
 def get_module_info(module, inputs, repeats=300, warmup=40, device=None, track_backward=True,
                     channels_last=False, amp=False, memory_unit='MB') -> dict:
-    '''
+    """
     Track module #macs, #parameters, time and memory consumption on forward and backward 
     pass for a given inputs tensor or inputs shape.
     
     Parameters
     ----------
-    module : torch.nn.modules
-             
+    module : torch.nn.modules    
     inputs : (tensor, tuple, list)
              Data which enter to the module.
-             
     repeats : int
               The number shows how many times we want to repeat
               module for tracking memory and time.
-              
     warmup : int
              Do a few iterations for stabilize std.
-             
     device : str
              Device can be 'cpu' or 'gpu'.
-             
     track_backward : bool
                      If True we want to track time and memory for backward operation.
-                     
     channels_last : bool
-                    You can change strides by choosing memory format = channels_last for your module
-                    and check how module perfomance changes.
-    
+                    You can change strides by choosing memory format = channels_last 
+                    for your module and check how module perfomance changes.
     amp : bool
           Set True or False for the parameter enabled in torch.cuda.amp.autocast(enabled=amp)
-    
     memory_unit : str
                   See MEMORY_UNIT_CONSTANTS which units you can choose for memory
     
@@ -92,7 +73,7 @@ def get_module_info(module, inputs, repeats=300, warmup=40, device=None, track_b
     -------
     dict
         Keys of dict are forward/backward time/memory and values are their results.
-    '''
+    """
     
     memory_unit_constant = MEMORY_UNIT_CONSTANTS[memory_unit]
     
@@ -164,5 +145,4 @@ def get_module_info(module, inputs, repeats=300, warmup=40, device=None, track_b
         result['parameters'] = float(params)
 
     result['time total(ms)'] = total_time.value
-    
     return result
