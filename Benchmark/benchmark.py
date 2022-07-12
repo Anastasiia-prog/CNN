@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from ptflops import get_model_complexity_info
 
-from batchflow.models.torch.utils import make_initialization_inputs
+from .utils import make_initialization_inputs
 
 # Different units for memory representation
 MEMORY_UNIT_CONSTANTS = {
@@ -130,7 +130,7 @@ def get_module_performance(module, inputs, n_repeats=300, warmup=40, device=None
                 # Calculate backward operation time
                 with TimeTracker() as backward_timer:
                     outputs.backward(outputs)
- 
+
                 backward_time = backward_timer.value
                 backward_timings.append(backward_time)
 
