@@ -86,12 +86,13 @@ class Train:
                 masks = labels_cpu.to(self.device)
 
                 outputs = self.model(inps)
-
+                predicted = torch.argmax(outputs, 1)
+                
                 loss = self.loss_function(outputs, masks)
                 running_loss += loss.item()
                 
                 # IoU score
-                val_iou = jaccard(outputs, masks).cpu().numpy()
+                val_iou = jaccard(predicted, masks).cpu().numpy()
                 iou_score[i] = val_iou  
                     
         avg_loss = running_loss / (i + 1)
