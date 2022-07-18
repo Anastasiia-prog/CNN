@@ -9,7 +9,7 @@ def Adam():
         t += 1
         gt = gradient(gt)
         mt = beta1 * mt + (1 - beta1) * gt
-        <b>vt = beta2 * vt + (1 - beta2) * gt**2</b>
+        **vt = beta2 * vt + (1 - beta2) * gt**2**
         Bias correction
         mt = mt / (1 - beta1 ** t)
         vt = vt / (1 - beta2 ** t)
